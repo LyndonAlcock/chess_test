@@ -62,18 +62,20 @@ impl PieceMethods for PieceOption {
 
 
 impl Board {
-    fn moves(&self, piece:&PieceOption, pos:IVec2, dir: Vec<IVec2>)->Vec<IVec2>{
+    fn moves(&self, piece:&PieceOption, pos:IVec2, dir: Vec<IVec2>)->Option<Vec<IVec2>>{
         dir.into_iter()
             .map(|d| d+pos)
             .filter(|p| (p.abs() == *p) && p.max_element() < 8)
             .flat_map(|p|
-                match piece{
-                    Some('B')|Some('b')=>{
-                        if self[p].is_empty() {self.moves(piece, p, vec![p-pos]).push(p)}
-                        else if self[p].is_rival(*piece) {p}
-                        else {}
-                        },
-                    _ => ().into()
+                if let Some(c) = piece{
+                    match c{
+                        'B'|'b'=>{
+                            if self[p].is_empty() {self.moves(piece, p, vec![p-pos])?.push(p)}
+                            else if self[p].is_rival(*piece) {Some(vec![p])}
+                            else {None?}
+                            },
+                        _ => None
+                } else {None}
                 }
             )
             .collect()
