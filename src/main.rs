@@ -1,22 +1,18 @@
 use glam::*;
 use std::{ops::Index, char};
+const WIDTH:i32 = 8;
+struct Board{pieces: [Piece;64]}
 
-const WIDTH:u32 = 8;
-const DIAGONALS : [IVec2; 4] = [
-    ivec2(-1, -1), ivec2(-1, 1),
-    ivec2(-1, 1), ivec2(1, 1)
-];
-struct Board{pieces: [char;64]}
-
-type PieceOption = Option<char>;
+type Piece = char;
 
 impl Index<IVec2> for Board {
-    type Output = PieceOption;
+    type Output = Piece;
     fn index(&self, v : IVec2) -> &Self::Output{
-        if (v.abs() != v) || (v.max_element() > 8) {&None}
-        else {
-            let i : usize = (v.x + 8* v.y).try_into().unwrap();
-            &Some(self.pieces[i])
+        if (v.abs() != v) || (v.max_element() > WIDTH-1) {
+            &'\0'
+        } else {
+            let i : usize = (v.x + WIDTH* v.y).try_into().unwrap();
+            &self.pieces[i]
         }
     }
 }
@@ -25,76 +21,135 @@ trait PieceMethods {
     fn is_empty(self)-> bool;
     fn is_black(self)-> bool;
     fn is_white(self)-> bool;
-    fn is_rival(self, other: PieceOption)-> bool;
-    fn is_ally(self, other: PieceOption)-> bool;
+    fn is_rival(self, other: Self)-> bool;
+    fn is_ally(self, other: Self)-> bool;
+    fn get_directions(self) -> Vec<IVec2>;
+    fn long_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
+    fn short_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
+    fn pawn_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
 }
 
-impl PieceMethods for PieceOption {
+impl PieceMethods for Piece {
     fn is_empty(self) -> bool{
-        if self == Some(' ') {true} 
-        else {false}
+        if self == ' ' {
+            true
+        } else {
+            false
+        }
     }
     fn is_black(self) -> bool {
         match self {
-            Some('k')|Some('q')|Some('b')|Some('n')|Some('r')|Some('p') => true,
+            'k' | 'q' | 'b' | 'n' | 'r' | 'p' => true,
             _=> false
         }
     }
     fn is_white(self) -> bool {
         match self {
-            Some('K')|Some('Q')|Some('B')|Some('N')|Some('R')|Some('P') => true,
+            'K' | 'Q' | 'B' | 'N' | 'R' | 'P' => true,
             _=> false
         }
     }
 
-    fn is_ally(self, other: PieceOption) -> bool{
+    fn is_ally(self, other: Self) -> bool{
         if self.is_black() && other.is_black() {true} 
         else if self.is_white() && other.is_white() {true}
         else {false}
     }
 
-    fn is_rival(self, other: PieceOption)-> bool {
+    fn is_rival(self, other: Self)-> bool {
         if self.is_white() && other.is_black() {true} 
         else if self.is_black() && other.is_white() {true}
         else {false}
+    }
+
+    fn get_directions(self)-> Vec<IVec2> {
+        match self{
+            'K'|'k'|'Q'|'q' => vec![
+                ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1), ivec2(-1,  0),
+                ivec2( 1,  0), ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)],
+            'N'|'n' => vec![
+                ivec2(-1, -2), ivec2( 1, -2), ivec2(-2, -1), ivec2( 2, -1),
+                ivec2(-2,  1), ivec2( 2,  1), ivec2(-1,  2), ivec2( 1,  2)
+            ],
+            'R'|'r' => vec![
+                ivec2( 0, -1), ivec2(-1,  0), ivec2( 1,  0), ivec2( 0,  1)
+            ],
+            'B'|'b' => vec![
+                ivec2(-1, -1), ivec2( 1, -1), ivec2(-1,  1), ivec2( 1,  1)
+            ],
+            'P' => vec![ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1)],
+            'p' => vec![ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)],
+            _=> Vec::new()
+        }
+    }
+
+    fn long_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>{
+        let next = pos + dir;
+        if board[next].is_empty() {
+            let mut moves = self.long_moves(next, dir, board);
+            moves.push(next);
+            moves
+        } else if board[next].is_rival(self) { 
+            vec![next]
+        } else {
+            vec![]
+        }
+    }
+
+    fn short_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
+        let next = pos + dir;
+        if board[next].is_empty() | board[next].is_rival(self) { 
+            vec![next] 
+        } else {
+            vec![]
+        }
+    }
+
+    fn pawn_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
+        match dir.abs().x{
+            0 => { self.short_moves(pos, dir, board) },
+            1 => { 
+                let next = pos + dir;
+                    if board[next].is_empty() | board[next].is_rival(self) { 
+                    vec![next] 
+                } else {
+                vec![]
+                }
+            },
+            _ => vec![]
+        }
     }
 }
 
 
 impl Board {
-    fn moves(&self, piece:&PieceOption, pos:IVec2, dir: Vec<IVec2>)->Option<Vec<IVec2>>{
-        dir.into_iter()
-            .map(|d| d+pos)
-            .filter(|p| (p.abs() == *p) && p.max_element() < 8)
-            .flat_map(|p|
-                if let Some(c) = piece{
-                    match c{
-                        'B'|'b'=>{
-                            if self[p].is_empty() {self.moves(piece, p, vec![p-pos])?.push(p)}
-                            else if self[p].is_rival(*piece) {Some(vec![p])}
-                            else {None?}
-                            },
-                        _ => None
-                } else {None}
+    fn get_moves(&self, pos:IVec2)-> Vec<IVec2>{
+        let piece = self[pos];
+        piece
+            .get_directions()
+            .into_iter()
+            .flat_map(|dir| {
+                match piece {
+                    'K' | 'k' | 'N' | 'n' => piece.short_moves(pos, dir, self),
+                    'Q' | 'q' | 'B' | 'b' | 'R' | 'r' => piece.long_moves(pos, dir, self),
+                    'P' | 'p' => piece.pawn_moves(pos, dir, self),
+                    _ => vec![]
                 }
-            )
+            })
             .collect()
     }
 }
 
-
 fn main() {
-    let board= Board{pieces:
+    let b = Board{pieces:
         [' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
+        ' ',' ','q',' ',' ',' ','Q',' ',
         ' ',' ',' ',' ',' ',' ',' ',' ',
         ' ',' ',' ',' ','b',' ',' ',' ',
         ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
+        ' ',' ','q',' ',' ',' ','q',' ',
         ' ',' ',' ',' ',' ',' ',' ',' ',
         ' ',' ',' ',' ',' ',' ',' ',' ',]};
 
-    board.moves('b', ivec2(4,3), DIAGONALS);
-    
-    
+    b.get_moves(ivec2(4,3)).into_iter().for_each(|v| print!("x:{} , y:{} ", v.x, v.y));
 }
