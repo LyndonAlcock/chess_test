@@ -1,155 +1,114 @@
-use glam::*;
-use std::{ops::Index, char};
-const WIDTH:i32 = 8;
-struct Board{pieces: [Piece;64]}
+use ggez::{
+    event::{self, MouseButton, EventHandler},
+    glam::*,
+    graphics::{self, Color},
+    Context, GameResult, mint::Point2, GameError,
+};
 
-type Piece = char;
-
-impl Index<IVec2> for Board {
-    type Output = Piece;
-    fn index(&self, v : IVec2) -> &Self::Output{
-        if (v.abs() != v) || (v.max_element() > WIDTH-1) {
-            &'\0'
-        } else {
-            let i : usize = (v.x + WIDTH* v.y).try_into().unwrap();
-            &self.pieces[i]
-        }
-    }
+struct Board{
+    circle: graphics::Mesh,
+    pieces: [Piece;3],
+    draw_pos : Point2<f32>,
+    handle: Point2<f32>
 }
+struct Piece {
+    held : bool,
+    pos : Point2<f32>,
 
-trait PieceMethods {
-    fn is_empty(self)-> bool;
-    fn is_black(self)-> bool;
-    fn is_white(self)-> bool;
-    fn is_rival(self, other: Self)-> bool;
-    fn is_ally(self, other: Self)-> bool;
-    fn get_directions(self) -> Vec<IVec2>;
-    fn long_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
-    fn short_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
-    fn pawn_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>;
 }
-
-impl PieceMethods for Piece {
-    fn is_empty(self) -> bool{
-        if self == ' ' {
-            true
-        } else {
-            false
-        }
-    }
-    fn is_black(self) -> bool {
-        match self {
-            'k' | 'q' | 'b' | 'n' | 'r' | 'p' => true,
-            _=> false
-        }
-    }
-    fn is_white(self) -> bool {
-        match self {
-            'K' | 'Q' | 'B' | 'N' | 'R' | 'P' => true,
-            _=> false
-        }
-    }
-
-    fn is_ally(self, other: Self) -> bool{
-        if self.is_black() && other.is_black() {true} 
-        else if self.is_white() && other.is_white() {true}
-        else {false}
-    }
-
-    fn is_rival(self, other: Self)-> bool {
-        if self.is_white() && other.is_black() {true} 
-        else if self.is_black() && other.is_white() {true}
-        else {false}
-    }
-
-    fn get_directions(self)-> Vec<IVec2> {
-        match self{
-            'K'|'k'|'Q'|'q' => vec![
-                ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1), ivec2(-1,  0),
-                ivec2( 1,  0), ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)],
-            'N'|'n' => vec![
-                ivec2(-1, -2), ivec2( 1, -2), ivec2(-2, -1), ivec2( 2, -1),
-                ivec2(-2,  1), ivec2( 2,  1), ivec2(-1,  2), ivec2( 1,  2)
-            ],
-            'R'|'r' => vec![
-                ivec2( 0, -1), ivec2(-1,  0), ivec2( 1,  0), ivec2( 0,  1)
-            ],
-            'B'|'b' => vec![
-                ivec2(-1, -1), ivec2( 1, -1), ivec2(-1,  1), ivec2( 1,  1)
-            ],
-            'P' => vec![ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1)],
-            'p' => vec![ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)],
-            _=> Vec::new()
-        }
-    }
-
-    fn long_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2>{
-        let next = pos + dir;
-        if board[next].is_empty() {
-            let mut moves = self.long_moves(next, dir, board);
-            moves.push(next);
-            moves
-        } else if board[next].is_rival(self) { 
-            vec![next]
-        } else {
-            vec![]
-        }
-    }
-
-    fn short_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
-        let next = pos + dir;
-        if board[next].is_empty() | board[next].is_rival(self) { 
-            vec![next] 
-        } else {
-            vec![]
-        }
-    }
-
-    fn pawn_moves(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
-        match dir.abs().x{
-            0 => { self.short_moves(pos, dir, board) },
-            1 => { 
-                let next = pos + dir;
-                    if board[next].is_empty() | board[next].is_rival(self) { 
-                    vec![next] 
-                } else {
-                vec![]
-                }
-            },
-            _ => vec![]
-        }
-    }
-}
-
 
 impl Board {
-    fn get_moves(&self, pos:IVec2)-> Vec<IVec2>{
-        let piece = self[pos];
-        piece
-            .get_directions()
-            .into_iter()
-            .flat_map(|dir| {
-                match piece {
-                    'K' | 'k' | 'N' | 'n' => piece.short_moves(pos, dir, self),
-                    'Q' | 'q' | 'B' | 'b' | 'R' | 'r' => piece.long_moves(pos, dir, self),
-                    'P' | 'p' => piece.pawn_moves(pos, dir, self),
-                    _ => vec![]
-                }
-            })
-            .collect()
+    fn new(ctx: &mut Context) -> GameResult<Self> {
+        let circle = graphics::Mesh::new_circle(
+            ctx,
+            graphics::DrawMode::fill(),
+            vec2(0., 0.),
+            50.0,
+            2.0,
+            Color::WHITE,
+        )?;
+
+        let piece1 = Piece{held: false, pos: Point2 { x: 30.0, y: 40.0 }};
+        let piece2 = Piece{held: false, pos: Point2 { x: 200.0, y: 200.0 }};
+        let piece3 = Piece{held: false, pos: Point2 { x: 400.0, y: 400.0 }};
+
+        Ok( Board{
+            circle,
+            pieces: [piece1,piece2,piece3],
+            draw_pos : Point2 { x: 0.0, y: 0.0 },
+            handle: Point2 { x: 0.0, y: 0.0 }
+        } )
+            
     }
 }
 
-fn main() {
-    let b = Board{pieces:
-        [' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ','q',' ',' ',' ','Q',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ','b',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ','q',' ',' ',' ','q',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',
-        ' ',' ',' ',' ',' ',' ',' ',' ',]};
 
-    b.get_moves(ivec2(4,3)).into_iter().for_each(|v| print!("x:{} , y:{} ", v.x, v.y));
+impl EventHandler<GameError> for Board {
+    fn update(&mut self, ctx: &mut Context) -> GameResult {
+        self.draw_pos.x = ctx.mouse.position().x + self.handle.x;
+        self.draw_pos.y = ctx.mouse.position().y + self.handle.y;
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        let mut canvas =
+            graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
+
+        for p in &self.pieces{
+            if p.held{
+                canvas.draw(&self.circle, self.draw_pos);
+            } else {
+                canvas.draw(&self.circle, p.pos);
+            }
+        }
+
+        canvas.finish(ctx)?;
+        Ok(())
+    }
+    
+
+    fn mouse_button_down_event(
+            &mut self,
+            _ctx: &mut Context,
+            button: MouseButton,
+            x: f32,
+            y: f32,
+        ) -> GameResult {
+        
+        for piece in self.pieces.iter_mut(){
+            let dist = ((x-piece.pos.x).powf(2.) + (y-piece.pos.y).powf(2.)).sqrt();
+        
+            if (dist < 100.) & (button == MouseButton::Left){
+                piece.held = true;
+                self.handle = Point2{x: piece.pos.x - x, y: piece.pos.y - y};
+            }
+            
+        }
+        Ok(())
+    }
+
+    fn mouse_button_up_event(
+            &mut self,
+            _ctx: &mut Context,
+            button: MouseButton,
+            x: f32,
+            y: f32,
+        ) -> Result<(), GameError> {
+        
+        for piece in self.pieces.iter_mut(){
+            if (piece.held == true) & (button == MouseButton::Left){
+                piece.held = false;
+                piece.pos = Point2{x: self.handle.x + x, y: self.handle.y + y};
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub fn main() -> GameResult {
+    let cb = ggez::ContextBuilder::new("super_simple", "ggez");
+    let (mut ctx, event_loop) = cb.build()?;
+    let state = Board::new(&mut ctx)?;
+    event::run(ctx, event_loop, state)
 }
