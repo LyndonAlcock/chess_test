@@ -1,9 +1,9 @@
 use std::ops::{Deref, Index};
 use ggez::glam::*;
 
-pub trait PieceMethods <Board> where 
+pub trait PieceMethods <B> where 
     Self: Copy + Sized + Deref<Target = char>,
-    Board: Index<IVec2, Output = Self>{
+    B: Index<IVec2, Output = Self>{
     fn is_empty(self)-> bool {
         if *self == ' ' {
             true
@@ -53,7 +53,7 @@ pub trait PieceMethods <Board> where
             _=> Vec::new()
         }
     }
-    fn long_move(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
+    fn long_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
         let next = pos + dir;
         if board[next].is_empty() {
             let mut moves = self.long_move(next, dir, board);
@@ -65,7 +65,7 @@ pub trait PieceMethods <Board> where
             vec![]
         }
     }
-    fn short_move(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
+    fn short_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
         let next = pos + dir;
         if board[next].is_empty() | board[next].is_rival(self) { 
             vec![next] 
@@ -73,7 +73,7 @@ pub trait PieceMethods <Board> where
             vec![]
         }
     }
-    fn pawn_move(self, pos: IVec2, dir: IVec2, board: &Board) -> Vec<IVec2> {
+    fn pawn_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
         match dir.abs().x{
             0 => { self.short_move(pos, dir, board) },
             1 => { 

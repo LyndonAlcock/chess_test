@@ -1,42 +1,38 @@
+use std::{path::PathBuf, env};
+
 use board::Board;
 use ggez::{
     event::{self, MouseButton, EventHandler},
     glam::*,
-    graphics::{self, Color},
-    Context, GameResult, mint::Point2, GameError,
+    graphics::{self, Image, DrawParam},
+    Context, GameResult, GameError,
 };
-mod piece_methods;
+use piece::Piece;
+
 mod board;
+mod piece;
+mod piece_methods;
+
+use crate::piece_methods::PieceMethods;
 
 const STARTING_FEN : &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-const TILE_SIZE : f32 = 100.0;
+const TILE_SIZE : f32 = 80.0;
 
 struct BoardState{
-    circle: graphics::Mesh,
+    image: Image,
     board: Board,
     held_index: IVec2,
     draw_pos: Vec2,
     handle: Vec2
 }
-struct Piece {
-    held : bool,
-    pos : Point2<f32>,
 
-}
 
 impl BoardState {
     fn new(ctx: &mut Context) -> GameResult<Self> {
-        let circle = graphics::Mesh::new_circle(
-            ctx,
-            graphics::DrawMode::fill(),
-            vec2(0., 0.),
-            50.0,
-            2.0,
-            Color::WHITE,
-        )?;
+        let image = Image::from_path(ctx, "/pieces.png")?;
 
         Ok( BoardState{
-            circle,
+            image,
             board: Board::parse_fen(STARTING_FEN),
             held_index: ivec2(-1, -1),
             draw_pos : vec2(0.0, 0.0),
@@ -61,11 +57,16 @@ impl EventHandler<GameError> for BoardState {
         for (i, p) in self.board.pieces.iter().enumerate(){
             let piece_index = ivec2((i%8) as i32, (i/8) as i32);
             let piece_pos = piece_index.as_vec2() * TILE_SIZE;
+            let draw_param = DrawParam::new()
+                .src(p.as_src_rect())
+                .scale(Vec2::splat(0.1));
 
             if piece_index==self.held_index && !p.is_empty(){
-                canvas.draw(&self.circle, self.draw_pos);
+                canvas.draw(&self.image, draw_param
+                    .dest(self.draw_pos));
             } else {
-                canvas.draw(&self.circle, piece_pos);
+                canvas.draw(&self.image, draw_param
+                    .dest(piece_pos));
             }
         }
 
@@ -85,9 +86,10 @@ impl EventHandler<GameError> for BoardState {
         for (i, p) in self.board.pieces.iter_mut().enumerate(){
             let piece_index = ivec2((i%8) as i32, (i/8) as i32);
             let piece_pos = piece_index.as_vec2() * TILE_SIZE;
-            let dist = ((x-piece_pos.x).powf(2.) + (y-piece_pos.y).powf(2.)).sqrt();
+            let mouse_pos = vec2(x, y);
+            //let dist = ((x-piece_pos.x).powf(2.) + (y-piece_pos.y).powf(2.)).sqrt();
         
-            if (dist < 100.) & (button == MouseButton::Left){
+            if  Piece::check_bounds(mouse_pos, piece_pos) & (button == MouseButton::Left){
                 self.held_index = piece_index;
                 self.handle = vec2(piece_pos.x - x, piece_pos.y - y);
             }
@@ -113,7 +115,16 @@ impl EventHandler<GameError> for BoardState {
 }
 
 pub fn main() -> GameResult {
-    let cb = ggez::ContextBuilder::new("super_simple", "ggez");
+    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = PathBuf::from(manifest_dir);
+        path.push("resources");
+        path
+    } else {
+        PathBuf::from("./resources")
+    };
+
+    let cb = ggez::ContextBuilder::new("super_simple", "ggez")
+        .add_resource_path(resource_dir);
     let (mut ctx, event_loop) = cb.build()?;
     let state = BoardState::new(&mut ctx)?;
     event::run(ctx, event_loop, state)
