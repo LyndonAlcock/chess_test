@@ -5,7 +5,7 @@ use ggez::{
     graphics::{self, Color},
     Context, GameResult, mint::Point2, GameError,
 };
-
+mod piece_methods;
 mod board;
 
 const STARTING_FEN : &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
