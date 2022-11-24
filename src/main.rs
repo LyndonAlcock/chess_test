@@ -4,7 +4,7 @@ use board::Board;
 use ggez::{
     event::{self, MouseButton, EventHandler},
     glam::*,
-    graphics::{self, Image, DrawParam},
+    graphics::{self, Image, DrawParam, DrawMode, Mesh, Rect, Color},
     Context, GameResult, GameError,
 };
 use piece::Piece;
@@ -20,6 +20,7 @@ const TILE_SIZE : f32 = 80.0;
 
 struct BoardState{
     image: Image,
+    mov_rect: Mesh,
     board: Board,
     held_index: IVec2,
     draw_pos: Vec2,
@@ -31,12 +32,19 @@ impl BoardState {
     fn new(ctx: &mut Context) -> GameResult<Self> {
         let image = Image::from_path(ctx, "/pieces.png")?;
 
+        let mov_rect = Mesh::new_rectangle(
+            ctx, 
+            DrawMode::fill(), 
+            Rect::new(0.0,0.0,TILE_SIZE, TILE_SIZE), 
+            Color::RED)?;
+
         Ok( BoardState{
             image,
+            mov_rect,
             board: Board::parse_fen(STARTING_FEN),
-            held_index: ivec2(-1, -1),
-            draw_pos : vec2(0.0, 0.0),
-            handle: vec2(0.0, 0.0)
+            held_index: IVec2::NEG_ONE,
+            draw_pos : Vec2::ZERO,
+            handle: Vec2::ZERO
         } )
             
     }
@@ -53,6 +61,11 @@ impl EventHandler<GameError> for BoardState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas =
             graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
+            
+        for v in self.board.get_moves(self.held_index){
+            let pos = v.as_vec2() * TILE_SIZE;
+            canvas.draw(&self.mov_rect, pos);
+        }
 
         for (i, p) in self.board.pieces.iter().enumerate(){
             let piece_index = ivec2((i%8) as i32, (i/8) as i32);
@@ -70,6 +83,7 @@ impl EventHandler<GameError> for BoardState {
             }
         }
 
+
         canvas.finish(ctx)?;
         Ok(())
     }
@@ -83,7 +97,7 @@ impl EventHandler<GameError> for BoardState {
             y: f32,
         ) -> GameResult {
         
-        for (i, p) in self.board.pieces.iter_mut().enumerate(){
+        for (i, _p) in self.board.pieces.iter_mut().enumerate(){
             let piece_index = ivec2((i%8) as i32, (i/8) as i32);
             let piece_pos = piece_index.as_vec2() * TILE_SIZE;
             let mouse_pos = vec2(x, y);
@@ -107,8 +121,9 @@ impl EventHandler<GameError> for BoardState {
         ) -> Result<(), GameError> {
         
         let drop_index = (vec2(x, y)/TILE_SIZE).floor().as_ivec2();
-        if button == MouseButton::Left{   
+        if button == MouseButton::Left{
             self.board.move_piece(self.held_index, drop_index);
+            self.held_index = IVec2::NEG_ONE;
         }
         Ok(())
     }

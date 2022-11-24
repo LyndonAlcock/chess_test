@@ -4,6 +4,7 @@ use ggez::glam::*;
 pub trait PieceMethods <B> where 
     Self: Copy + Sized + Deref<Target = char>,
     B: Index<IVec2, Output = Self>{
+    
     fn is_empty(self)-> bool {
         if *self == ' ' {
             true
@@ -24,14 +25,21 @@ pub trait PieceMethods <B> where
         }
     }
     fn is_rival(self, other: Self)-> bool {
-        if self.is_black() && other.is_white() {true} 
-        else if self.is_white() && other.is_black() {true}
+        if self.is_black() & other.is_white() {true} 
+        else if self.is_white() & other.is_black() {true}
+        else if self.is_pawn() & (*other == '-') {println!("its rival"); true}
         else {false}
     }
-    fn is_ally(&self, other: Self)-> bool {
-        if self.is_black() && other.is_black() {true} 
-        else if self.is_white() && other.is_white() {true}
+    fn is_ally(self, other: Self)-> bool {
+        if self.is_black() & other.is_black() {true} 
+        else if self.is_white() & other.is_white() {true}
         else {false}
+    }
+    fn is_pawn(self)-> bool {
+        match *self{
+            'P' | 'p' => true,
+            _ => false
+        }
     }
     fn get_directions(self) -> Vec<IVec2> {
         match *self{
@@ -48,11 +56,14 @@ pub trait PieceMethods <B> where
             'B'|'b' => vec![
                 ivec2(-1, -1), ivec2( 1, -1), ivec2(-1,  1), ivec2( 1,  1)
             ],
-            'P' => vec![ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1)],
-            'p' => vec![ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1)],
+            'P' => vec![ivec2(-1, -1), ivec2( 0, -1), ivec2( 1, -1), ivec2(0, -2)],
+            'p' => vec![ivec2(-1,  1), ivec2( 0,  1), ivec2( 1,  1), ivec2(0,  2)],
             _=> Vec::new()
         }
     }
+
+    fn pawn_start_pos(self) -> i32 { match *self{'P' => 6, 'p' => 1, _ => -1 } }
+
     fn long_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
         let next = pos + dir;
         if board[next].is_empty() {
@@ -65,6 +76,7 @@ pub trait PieceMethods <B> where
             vec![]
         }
     }
+
     fn short_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
         let next = pos + dir;
         if board[next].is_empty() | board[next].is_rival(self) { 
@@ -74,16 +86,30 @@ pub trait PieceMethods <B> where
         }
     }
     fn pawn_move(self, pos: IVec2, dir: IVec2, board: &B) -> Vec<IVec2> {
-        match dir.abs().x{
-            0 => { self.short_move(pos, dir, board) },
-            1 => { 
-                let next = pos + dir;
-                    if board[next].is_empty() | board[next].is_rival(self) { 
+        let next = pos + dir;
+        match dir.abs(){
+            IVec2::Y => {
+                if board[next].is_empty() { 
                     vec![next] 
                 } else {
                 vec![]
                 }
             },
+            IVec2{x:0, y:2} => {
+                if board[next].is_empty() & (pos.y == self.pawn_start_pos()){ 
+                    vec![next] 
+                } else {
+                vec![]
+                }
+            },
+            IVec2::ONE => { 
+                if board[next].is_rival(self) { 
+                    vec![next] 
+                } else {
+                vec![]
+                }
+            },
+            
             _ => vec![]
         }
     }
